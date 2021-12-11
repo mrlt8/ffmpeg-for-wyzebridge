@@ -1,0 +1,51 @@
+
+name: "Build Darwin x86_64"
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        name: [
+          darwin-x86_64
+        ]
+        include:
+          - name: darwin-x86_64
+            os: macOS-latest
+         
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Get the upload URL for a release
+      id: get_release
+      uses: bruceadams/get-release@v1.2.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # macOS Build
+    - name: macOS - Build static ffmpeg binary
+      if: runner.os == 'macOS'
+      run: |
+        mkdir -p build
+        cd build && SKIPINSTALL=yes VERBOSE=yes ../build-ffmpeg --build
+
+    - name: Prepare Asset
+      run: |
+        mkdir -p package/usr/local/bin/
+        cp build/workspace/bin/ffmpeg package/usr/local/bin/ffmpeg
+        tar -C package -zcvf ffmpeg-${{ matrix.name }}.tar.gz .
+
+    # upload Darwin x64
+    - name: Upload Darwin x64
+      uses: actions/upload-release-asset@v1.0.2
+      env:
+        GITHUB_TOKEN: ${{ secrets.TOKEN_GITHUB }}
+      with:
+        upload_url: ${{ steps.get_release.outputs.upload_url }}
+        asset_path: ffmpeg-${{ matrix.name }}.tar.gz
+        asset_name: ffmpeg-${{ matrix.name }}.tar.gz
+        asset_content_type: application/octet-stream

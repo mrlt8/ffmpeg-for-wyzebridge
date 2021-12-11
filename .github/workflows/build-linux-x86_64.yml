@@ -1,0 +1,74 @@
+
+name: "Build Linux x86_64"
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        name: [
+          debian-x86_64,
+          alpine-x86_64
+        ]
+        include:
+          - name: debian-x86_64
+            os: ubuntu-latest
+            BASE_IMAGE: library/debian:stretch
+            DOCKERFILE: Dockerfile.debian
+            TARGET_OS: debian
+          - name: alpine-x86_64
+            os: ubuntu-latest
+            BASE_IMAGE: library/alpine:3.11.3
+            DOCKERFILE: Dockerfile.alpine
+            TARGET_OS: alpine
+         
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Get the upload URL for a release
+      id: get_release
+      uses: bruceadams/get-release@v1.2.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # Linux Builds
+    - name: Linux - Setup Dependencies
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get --yes --no-install-recommends install binfmt-support qemu-user-static
+        docker run --rm --privileged multiarch/qemu-user-static:register --reset
+    - name: Linux - Build Docker Image 
+      if: runner.os == 'Linux'
+      run: |
+        docker build --build-arg BASE_IMAGE=${{ matrix.BASE_IMAGE }} -f ${{ matrix.DOCKERFILE }} -t ffmpeg-builder .
+    - name: Linux - Build static ffmpeg binary
+      if: runner.os == 'Linux'
+      run: |
+        mkdir -p build
+        docker run -v $(pwd)/build:/build -e TARGET_OS=${{ matrix.TARGET_OS }} ffmpeg-builder
+    - name: Linux - Fix permissions
+      if: runner.os == 'Linux'
+      run: |
+        sudo chown -R $USER:$USER build
+
+    - name: Prepare Asset
+      run: |
+        mkdir -p package/usr/local/bin/
+        cp build/workspace/bin/ffmpeg package/usr/local/bin/ffmpeg
+        tar -C package -zcvf ffmpeg-${{ matrix.name }}.tar.gz .
+
+    # upload Linux x64
+    - name: Upload Linux x64
+      uses: actions/upload-release-asset@v1.0.2
+      env:
+        GITHUB_TOKEN: ${{ secrets.TOKEN_GITHUB }}
+      with:
+        upload_url: ${{ steps.get_release.outputs.upload_url }}
+        asset_path: ffmpeg-${{ matrix.name }}.tar.gz
+        asset_name: ffmpeg-${{ matrix.name }}.tar.gz
+        asset_content_type: application/octet-stream

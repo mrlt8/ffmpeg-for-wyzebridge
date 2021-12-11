@@ -1,26 +1,21 @@
 
-name: "Build ffmpeg"
+name: "Build Linux arm / arm64"
 
 on:
-  push:
-    tags:
-    - 'v*'
+  release:
+    types: [created]
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
+    runs-on: self-hosted
     strategy:
       matrix:
         name: [
           raspbian-armv6l,
-          debian-x86_64,
           debian-armv7l,
           debian-aarch64,
-          alpine-x86_64,
           alpine-armv6l,
           alpine-aarch64,
-          darwin-x86_64,
-          darwin-arm64
         ]
         include:
           - name: raspbian-armv6l
@@ -58,19 +53,15 @@ jobs:
             BASE_IMAGE: arm64v8/alpine:3.11.3
             DOCKERFILE: Dockerfile.alpine
             TARGET_OS: alpine
-          - name: darwin-x86_64
-            os: macOS-latest
-          - name: darwin-arm64
-            os: macOS-latest
-
+         
     steps:
     - uses: actions/checkout@v2
-    - name: Cache Workspace
-      id: cache
-      uses: actions/cache@v1
-      with:
-        path: build
-        key: ${{ matrix.name }}-cache
+
+    - name: Get the upload URL for a release
+      id: get_release
+      uses: bruceadams/get-release@v1.2.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     # Linux Builds
     - name: Linux - Setup Dependencies
@@ -93,21 +84,19 @@ jobs:
       run: |
         sudo chown -R $USER:$USER build
 
-    # macOS Build
-    - name: macOS - Build static ffmpeg binary
-      if: runner.os == 'macOS'
-      run: |
-        mkdir -p build
-        cd build && SKIPINSTALL=yes VERBOSE=yes ../build-ffmpeg --build
-
     - name: Prepare Asset
       run: |
         mkdir -p package/usr/local/bin/
         cp build/workspace/bin/ffmpeg package/usr/local/bin/ffmpeg
         tar -C package -zcvf ffmpeg-${{ matrix.name }}.tar.gz .
 
-    - name: Upload Asset
-      uses: actions/upload-artifact@v1
+    # upload arm / arm64
+    - name: Upload arm / arm64
+      uses: actions/upload-release-asset@v1.0.2
+      env:
+        GITHUB_TOKEN: ${{ secrets.TOKEN_GITHUB }}
       with:
-        name: ffmpeg-${{ matrix.name }}
-        path: ffmpeg-${{ matrix.name }}.tar.gz
+        upload_url: ${{ steps.get_release.outputs.upload_url }}
+        asset_path: ffmpeg-${{ matrix.name }}.tar.gz
+        asset_name: ffmpeg-${{ matrix.name }}.tar.gz
+        asset_content_type: application/octet-stream
