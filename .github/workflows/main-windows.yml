@@ -1,0 +1,85 @@
+
+name: "Build ffmpeg"
+
+on:
+  push:
+    branch:
+    - 'windows'
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        name: [
+          windows
+        ]
+        include:
+          - name: windows
+            os: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Cache Workspace
+      id: cache
+      uses: actions/cache@v3
+      with:
+        path: build
+        key: ${{ matrix.name }}-cache
+
+    # Linux Builds
+    - name: Linux - Setup Dependencies
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get --yes --no-install-recommends install binfmt-support qemu-user-static
+        docker run --rm --privileged multiarch/qemu-user-static:register --reset
+    - name: Linux - Build Docker Image 
+      if: runner.os == 'Linux'
+      run: |
+        docker build --build-arg BASE_IMAGE=${{ matrix.BASE_IMAGE }} -f ${{ matrix.DOCKERFILE }} -t ffmpeg-builder .
+    - name: Linux - Build static ffmpeg binary
+      if: runner.os == 'Linux'
+      run: |
+        mkdir -p build
+        docker run -v $(pwd)/build:/build -e TARGET_OS=${{ matrix.TARGET_OS }} ffmpeg-builder
+    - name: Linux - Fix permissions
+      if: runner.os == 'Linux'
+      run: |
+        sudo chown -R $USER:$USER build
+
+   # Windows Build
+    - name: Windows - Prepare environment
+      if: runner.os == 'Linux'
+      run: |
+        cd $HOME
+        git clone https://github.com/rdp/ffmpeg-windows-build-helpers.git
+        sudo apt update
+        sudo apt install subversion ragel curl texinfo g++ bison flex cvs yasm automake libtool libtool-bin autoconf gcc cmake git make pkg-config zlib1g-dev unzip pax nasm gperf autogen bzip2 autoconf-archive p7zip-full meson clang gcc-mingw-w64-i686 g++-mingw-w64-i686 gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64 python3-distutils python-is-python3 -y
+    - name: Windows - Build
+      if: runner.os == 'Linux'
+      run: |
+        cd $HOME/ffmpeg-windows-build-helpers
+        rm -rf sandbox
+        bash ./cross_compile_ffmpeg.sh --ffmpeg-git-checkout-version=$VERSION --disable-nonfree=n --compiler-flavors=win64 --build-ffmpeg-static=y --build-ffmpeg-shared=n
+
+    - name: Prepare Asset
+      run: |
+        mkdir -p package/usr/local/bin/
+        cp build/workspace/bin/ffmpeg package/usr/local/bin/ffmpeg
+        tar -C package -zcvf ffmpeg-${{ matrix.name }}.tar.gz .
+
+    - name: Upload Asset
+      uses: actions/upload-artifact@v3
+      with:
+        name: ffmpeg-${{ matrix.name }}
+        path: ffmpeg-${{ matrix.name }}.tar.gz
+
+  publish:
+    needs: build
+
+    if: ${{ github.repository == 'homebridge/ffmpeg-for-homebridge' && github.branches == 'master' && github.event_name == 'release' && startsWith(github.ref, 'refs/tags/v')}}
+
+    uses: homebridge/.github/.github/workflows/npm-publish.yml@main
+    secrets:
+      npm_auth_token: ${{ secrets.npm_token }}
