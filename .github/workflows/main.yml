@@ -21,6 +21,7 @@ jobs:
           alpine-aarch64,
           darwin-x86_64
           darwin-arm
+          windows
         ]
         include:
           - name: raspbian-armv6l
