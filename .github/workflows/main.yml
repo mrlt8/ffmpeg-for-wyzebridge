@@ -63,8 +63,6 @@ jobs:
             os: macOS-latest
           - name: darwin-arm
             os: macOS-latest
-          - name: darwin-x86_64
-            os: macOS-latest
           - name: windows
             os: ubuntu-latest
 
