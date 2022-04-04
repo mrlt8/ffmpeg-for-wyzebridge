@@ -260,7 +260,7 @@ if command_exists "python3"; then
   fi
   if command_exists "meson"; then
     if build "dav1d" "0.9.2"; then
-      download "https://code.videolan.org/videolan/dav1d/-/archive/0.9.2/dav1d-0.9.2.tar.gz"
+      download "https://code.videolan.org/videolan/dav1d/-/archive/1.0.0/dav1d-1.0.0.tar.gz"
       make_dir build
       
       CFLAGSBACKUP=$CFLAGS
@@ -272,7 +272,7 @@ if command_exists "python3"; then
       
       export CFLAGS=$CFLAGSBACKUP
       
-      build_done "dav1d" "0.9.2"
+      build_done "dav1d" "1.0.0"
     fi
     CONFIGURE_OPTIONS+=("--enable-libdav1d")
   fi
